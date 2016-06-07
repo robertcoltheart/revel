@@ -1,2 +1,2 @@
 # Revel
-A simple DirectX game engine.
+A DirectX framework for Windows games.
