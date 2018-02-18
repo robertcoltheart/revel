@@ -1,14 +1,12 @@
-﻿using NUnit.Framework;
+﻿using Xunit;
 
 namespace Revel
 {
-    [TestFixture]
     public class FakeTests
     {
-        [Test]
+        [Fact]
         public void Test()
         {
-
         }
     }
 }

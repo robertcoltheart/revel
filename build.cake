@@ -1,16 +1,17 @@
-#tool "nuget:?package=GitVersion.CommandLine&version=3.6.5"
-#tool "nuget:?package=NUnit.ConsoleRunner&version=3.5.0"
+#tool "GitVersion.CommandLine"
 
 //////////////////////////////////////////////////////////////////////
 // ARGUMENTS
 //////////////////////////////////////////////////////////////////////
 var target = Argument("target", "Default");
+var configuration = Argument("configuration", "Release");
 var nugetApiKey = Argument("nugetapikey", EnvironmentVariable("NUGET_API_KEY"));
 
 //////////////////////////////////////////////////////////////////////
 // GLOBAL VARIABLES
 //////////////////////////////////////////////////////////////////////
 var version = "0.1.0";
+var versionNumber = "1.0.0";
 
 var artifacts = Directory("./artifacts");
 var solution = File("./src/Revel.sln");
@@ -24,49 +25,58 @@ Task("Clean")
     CleanDirectories("./src/**/bin");
     CleanDirectories("./src/**/obj");
 
-    DeleteFiles("./docs/api/*.yml");
-    DeleteFiles("./docs/api/.manifest");
-
     if (DirectoryExists(artifacts))
-        DeleteDirectory(artifacts, true);
+    {
+        DeleteDirectory(artifacts, new DeleteDirectorySettings 
+        {
+            Recursive = true,
+            Force = true
+        });
+    }
 });
 
 Task("Restore")
     .IsDependentOn("Clean")
     .Does(() => 
 {
-    NuGetRestore(solution);
+    DotNetCoreRestore(solution);
 });
 
 Task("Versioning")
     .IsDependentOn("Clean")
-    .WithCriteria(() => !BuildSystem.IsLocalBuild)
     .Does(() => 
 {
-    GitVersion(new GitVersionSettings
+    if (!BuildSystem.IsLocalBuild)
     {
-        OutputType = GitVersionOutput.BuildServer
-    });
+        GitVersion(new GitVersionSettings
+        {
+            OutputType = GitVersionOutput.BuildServer
+        });
+    }
 
     var result = GitVersion(new GitVersionSettings
     {
-        UpdateAssemblyInfo = true
+        OutputType = GitVersionOutput.Json
     });
 
     version = result.NuGetVersion;
+    versionNumber = result.MajorMinorPatch;
 });
 
 Task("Build")
     .IsDependentOn("Versioning")
-    .IsDependentOn("Restore")    
+    .IsDependentOn("Restore")
     .Does(() => 
 {
     CreateDirectory(artifacts);
 
-    DotNetBuild(solution, x => 
+    DotNetCoreBuild(solution, new DotNetCoreBuildSettings
     {
-        x.SetConfiguration("Release");
-        x.WithProperty("GenerateDocumentation", "true");
+        Configuration = configuration,
+        ArgumentCustomization = x => x
+            .Append("/p:Version={0}", version)
+            .Append("/p:AssemblyVersion={0}", versionNumber)
+            .Append("/p:FileVersion={0}", versionNumber)
     });
 });
 
@@ -74,15 +84,12 @@ Task("Test")
     .IsDependentOn("Build")
     .Does(() => 
 {
-    var testResults = artifacts + File("TestResults.xml");
-    
-    NUnit3("./src/**/bin/**/Release/*.Tests.dll", new NUnit3Settings
+    var projects = GetFiles("./src/**/*.Tests.csproj");
+
+    foreach (var project in projects)
     {
-        Results = testResults
-    });
-    
-    if (BuildSystem.IsRunningOnAppVeyor)
-        AppVeyor.UploadTestResults(testResults, AppVeyorTestResultsType.NUnit3);
+        DotNetCoreTest(project.FullPath);
+    }
 });
 
 Task("Package")
@@ -90,31 +97,44 @@ Task("Package")
     .IsDependentOn("Test")
     .Does(() => 
 {
-    NuGetPack("./build/Revel.nuspec", new NuGetPackSettings
+    var projects = GetFiles("./src/**/*.csproj", x => !x.Path.FullPath.EndsWith("Tests"));
+
+    foreach (var project in projects)
     {
-        Version = version,
-        BasePath = "./src",
-        OutputDirectory = artifacts
-    });
+        DotNetCorePack(project.FullPath, new DotNetCorePackSettings
+        {
+            Configuration = configuration,
+            OutputDirectory = artifacts,
+            NoBuild = true,
+            ArgumentCustomization = x => x
+                .Append("/p:Version={0}", version)
+        });
+    }
 });
 
 Task("Publish")
     .IsDependentOn("Package")
+    .WithCriteria(() => BuildSystem.IsRunningOnAppVeyor)
+    .WithCriteria(() => AppVeyor.Environment.Repository.Tag.IsTag)
     .Does(() =>
 {
-    var package = "./artifacts/Revel." + version + ".nupkg";
+    var packages = GetFiles("./artifacts/**/*.nupkg");
 
-    NuGetPush(package, new NuGetPushSettings
+    foreach (var package in packages)
     {
-        ApiKey = nugetApiKey
-    });
+        DotNetCoreNuGetPush(package.FullPath, new DotNetCoreNuGetPushSettings
+        {
+            Source = "https://www.nuget.org/api/v2/package",
+            ApiKey = nugetApiKey
+        });
+    }
 });
 
 //////////////////////////////////////////////////////////////////////
 // TASK TARGETS
 //////////////////////////////////////////////////////////////////////
 Task("Default")
-    .IsDependentOn("Package");
+    .IsDependentOn("Publish");
 
 //////////////////////////////////////////////////////////////////////
 // EXECUTION
