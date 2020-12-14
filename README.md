@@ -1,8 +1,11 @@
-# Revel [![AppVeyor](https://img.shields.io/appveyor/ci/robertcoltheart/Revel.svg)](https://ci.appveyor.com/project/robertcoltheart/Revel) [![NuGet](https://img.shields.io/nuget/v/Revel.svg)](https://www.nuget.org/packages/Revel)
+# Revel 
+
+[![NuGet](https://img.shields.io/nuget/v/Revel?style=for-the-badge)](https://www.nuget.org/packages/Revel) [![Build](https://img.shields.io/github/workflow/status/robertcoltheart/Revel/build?style=for-the-badge)](https://github.com/robertcoltheart/Revel/actions?query=workflow:build) [![License](https://img.shields.io/github/license/robertcoltheart/Revel?style=for-the-badge)](https://github.com/robertcoltheart/Revel/blob/master/LICENSE)
+
 A DirectX framework for Windows games.
 
 ## Usage
-Install the package from NuGet with `nuget install Revel`.
+Install the package from NuGet with `dotnet add package Revel`.
 
 ```csharp
 Example code
